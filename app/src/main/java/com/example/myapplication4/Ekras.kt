@@ -70,6 +70,8 @@ fun CompareScreen(
     val artist2Result = remember { mutableStateOf<ArtistInfo?>(null) }
     val tracks1 = remember { mutableStateOf<List<TrackInfo>>(emptyList()) }
     val tracks2 = remember { mutableStateOf<List<TrackInfo>>(emptyList()) }
+    val albums1 = remember { mutableStateOf<List<AlbumInfo>>(emptyList()) }
+    val albums2 = remember { mutableStateOf<List<AlbumInfo>>(emptyList()) }
     val tags1 = remember { mutableStateOf<List<TagInfo>>(emptyList()) }
     val tags2 = remember { mutableStateOf<List<TagInfo>>(emptyList()) }
     val errorMessage = remember { mutableStateOf("") }
@@ -143,6 +145,12 @@ fun CompareScreen(
                             val topTags2 = RetrofitClient.api.getTopTags(name2)
                             tags1.value = topTags1.toptags?.tag?.take(5) ?: emptyList()
                             tags2.value = topTags2.toptags?.tag?.take(5) ?: emptyList()
+
+                            //
+                            val topAlbums1 = RetrofitClient.api.getTopAlbums(name1)
+                            val topAlbums2 = RetrofitClient.api.getTopAlbums(name2)
+                            albums1.value = topAlbums1.topalbums?.album?.filter { it.name != "(null)" } ?: emptyList()
+                            albums2.value = topAlbums2.topalbums?.album?.filter { it.name != "(null)" } ?: emptyList()
 
                             val summary = "${res1.artist.name} vs ${res2.artist.name}\n" +
                                     "Listeners: ${formatNumber(res1.artist.stats.listeners)} vs ${formatNumber(res2.artist.stats.listeners)}"
@@ -287,22 +295,39 @@ fun CompareScreen(
                 SectionTitle(title = "Genre Profile", fontSize = fontSize, textColor = currentTextColor)
                 Spacer(modifier = Modifier.height(16.dp))
 
-
-
-                TopTagsDonutChart( // O prueba TopTagsRingsChart o TopTagsBubblesChart
+                TopTagsDonutChart(
                     artistName = a1.name,
                     tags = tags1.value,
                     accentColor = Color(0xFF6200EE),
                     textColor = currentTextColor
                 )
-
-
-
                 Spacer(modifier = Modifier.height(20.dp))
-                TopTagsChart(
+                TopTagsDonutChart(
                     artistName = a2.name,
                     tags = tags2.value,
-                    barColor = Color(0xFF00897B),
+                    accentColor = Color(0xFF00897B),
+                    textColor = currentTextColor
+                )
+            }
+
+            // --- SECTION F: MOST FAMOUS ALBUMS ---
+            if (albums1.value.isNotEmpty() && albums2.value.isNotEmpty()) {
+                HorizontalDivider(modifier = Modifier.padding(vertical = 28.dp))
+
+                SectionTitle(title = "Most Famous Albums", fontSize = fontSize, textColor = currentTextColor)
+                Spacer(modifier = Modifier.height(16.dp))
+
+                TopAlbumsRingsChart(
+                    artistName = a1.name,
+                    albums = albums1.value,
+                    accentColor = Color(0xFF6200EE),
+                    textColor = currentTextColor
+                )
+                Spacer(modifier = Modifier.height(20.dp))
+                TopAlbumsRingsChart(
+                    artistName = a2.name,
+                    albums = albums2.value,
+                    accentColor = Color(0xFF00897B),
                     textColor = currentTextColor
                 )
             }
@@ -524,22 +549,32 @@ fun formatNumber(value: String): String {
     return NumberFormat.getInstance(Locale("es", "ES")).format(number)
 }
 
-//grafico en forma de anillo
+//grafico en forma de anillo para los albums
 @Composable
-fun TopTagsRingsChart(
+fun TopAlbumsRingsChart(
     artistName: String,
-    tags: List<TagInfo>,
+    albums: List<AlbumInfo>,
     accentColor: Color,
     textColor: Color,
     modifier: Modifier = Modifier
 ) {
+    val playsList = albums.map { it.playcount.toLongOrNull()?.coerceAtLeast(0L) ?: 0L }
+    val totalPlays = playsList.sum().coerceAtLeast(1L)
+
+    val rawPercentages = playsList.map { ((it * 100f) / totalPlays).toInt() }
+    val diff = 100 - rawPercentages.sum()
+    val maxIndex = rawPercentages.indices.maxByOrNull { rawPercentages[it] } ?: 0
+    val normalizedPercentages = rawPercentages.mapIndexed { idx, value ->
+        if (idx == maxIndex) (value + diff).coerceAtLeast(0) else value.coerceAtLeast(0)
+    }
+
     Column(
         modifier = modifier
             .fillMaxWidth()
             .padding(vertical = 8.dp)
     ) {
         Text(
-            text = "Top Genres - $artistName",
+            text = "Top Albums - $artistName",
             fontWeight = FontWeight.Bold,
             fontSize = 15.sp,
             color = textColor
@@ -550,12 +585,13 @@ fun TopTagsRingsChart(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
-            tags.forEach { tag ->
-                val progress = (tag.count / 100f).coerceIn(0.05f, 1f)
+            albums.forEachIndexed { index, album ->
+                val sharePercent = normalizedPercentages.getOrElse(index) { 0 }
+                val progress = (sharePercent / 100f).coerceIn(0.03f, 1f)
 
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.width(64.dp)
+                    modifier = Modifier.width(68.dp)
                 ) {
                     Box(
                         contentAlignment = Alignment.Center,
@@ -569,7 +605,7 @@ fun TopTagsRingsChart(
                             modifier = Modifier.fillMaxSize()
                         )
                         Text(
-                            text = "${tag.count}%",
+                            text = "$sharePercent%",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             color = textColor
@@ -577,7 +613,7 @@ fun TopTagsRingsChart(
                     }
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = tag.name,
+                        text = album.name,
                         fontSize = 11.sp,
                         color = textColor,
                         textAlign = TextAlign.Center,
@@ -591,9 +627,7 @@ fun TopTagsRingsChart(
 }
 
 
-
-
-//grafico donut
+//grafico donut para los generos
 @Composable
 fun TopTagsDonutChart(
     artistName: String,
@@ -609,7 +643,13 @@ fun TopTagsDonutChart(
         Color(0xFFFFCA28),
         Color(0xFFAB47BC)
     )
-    val total = tags.sumOf { it.count }.coerceAtLeast(1)
+    val totalScore = tags.sumOf { it.count.coerceAtLeast(0) }.coerceAtLeast(1)
+    val rawPercentages = tags.map { ((it.count.coerceAtLeast(0) * 100f) / totalScore).toInt() }
+    val diff = 100 - rawPercentages.sum()
+    val maxIndex = rawPercentages.indices.maxByOrNull { rawPercentages[it] } ?: 0
+    val normalizedPercentages = rawPercentages.mapIndexed { idx, value ->
+        if (idx == maxIndex) (value + diff).coerceAtLeast(0) else value.coerceAtLeast(0)
+    }
 
     Column(
         modifier = modifier
@@ -629,7 +669,6 @@ fun TopTagsDonutChart(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            // Donut drawn with Canvas
             Canvas(
                 modifier = Modifier
                     .size(120.dp)
@@ -637,7 +676,8 @@ fun TopTagsDonutChart(
             ) {
                 var startAngle = -90f
                 tags.forEachIndexed { index, tag ->
-                    val sweepAngle = (tag.count.toFloat() / total.toFloat()) * 360f
+                    val weight = tag.count.coerceAtLeast(0).toFloat() / totalScore.toFloat()
+                    val sweepAngle = weight * 360f
                     drawArc(
                         color = sliceColors[index % sliceColors.size],
                         startAngle = startAngle,
@@ -649,9 +689,9 @@ fun TopTagsDonutChart(
                 }
             }
 
-            // Legend
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 tags.forEachIndexed { index, tag ->
+                    val sharePercent = normalizedPercentages.getOrElse(index) { 0 }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
                             modifier = Modifier
@@ -661,7 +701,7 @@ fun TopTagsDonutChart(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "${tag.name} (${tag.count}%)",
+                            text = "${tag.name} ($sharePercent%)",
                             fontSize = 13.sp,
                             color = textColor
                         )
@@ -673,62 +713,6 @@ fun TopTagsDonutChart(
 }
 
 
-
-//grafico burbuja
-@Composable
-fun TopTagsBubblesChart(
-    artistName: String,
-    tags: List<TagInfo>,
-    accentColor: Color,
-    textColor: Color,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp)
-    ) {
-        Text(
-            text = "Top Genres - $artistName",
-            fontWeight = FontWeight.Bold,
-            fontSize = 15.sp,
-            color = textColor
-        )
-        Spacer(modifier = Modifier.height(12.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            tags.forEach { tag ->
-                // Size scales between 44.dp and 72.dp based on count (0..100)
-                val bubbleSize = (44f + (tag.count / 100f) * 28f).dp
-                val alpha = (0.45f + (tag.count / 100f) * 0.55f).coerceIn(0.45f, 1f)
-
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier
-                        .size(bubbleSize)
-                        .clip(CircleShape)
-                        .background(accentColor.copy(alpha = alpha))
-                        .padding(4.dp)
-                ) {
-                    Text(
-                        text = "${tag.name}\n${tag.count}%",
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White,
-                        textAlign = TextAlign.Center,
-                        lineHeight = 12.sp,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
-        }
-    }
-}
 
 
 

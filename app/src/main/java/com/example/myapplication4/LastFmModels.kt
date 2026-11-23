@@ -29,6 +29,20 @@ data class TrackInfo(
     val playcount: String
 )
 
+//para los top albums
+data class TopAlbumsResponse(
+    val topalbums: TopAlbumsData?
+)
+
+data class TopAlbumsData(
+    val album: List<AlbumInfo>
+)
+
+data class AlbumInfo(
+    val name: String,
+    val playcount: String
+)
+
 
 //para los generos
 data class TopTagsResponse(

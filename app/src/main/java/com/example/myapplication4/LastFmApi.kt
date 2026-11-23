@@ -25,6 +25,15 @@ interface LastFmApi {
         @Query("format") format: String = "json"
     ): TopTracksResponse
 
+    //para los albums
+    @GET("2.0/")
+    suspend fun getTopAlbums(
+        @Query("artist") artistName: String,
+        @Query("method") method: String = "artist.getTopAlbums",
+        @Query("limit") limit: Int = 5,
+        @Query("api_key") apiKey: String = "4cbf91e73f79688429f475bda1ab71b6",
+        @Query("format") format: String = "json"
+    ): TopAlbumsResponse
 
     //para los generos
     @GET("2.0/")
