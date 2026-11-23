@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">My Application 4</string>
+    <string name="ecra01">Compare</string>
+    <string name="ecra02">History</string>
+    <string name="ecra03">Settings</string>
+    <string name="ecra04">List</string>
+</resources>
