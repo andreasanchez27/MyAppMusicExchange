@@ -463,54 +463,6 @@ fun ComparisonProgressBarsChart(
     }
 }
 
-// grafico de albums en horizontal
-@Composable
-fun TopTracksChart(
-    artistName: String,
-    tracks: List<TrackInfo>,
-    maxPlaycount: Long,
-    barColor: Color,
-    textColor: Color,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp)
-    ) {
-        Text(
-            text = "Top 5 Tracks - $artistName",
-            fontWeight = FontWeight.Bold,
-            fontSize = 15.sp,
-            color = textColor
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-
-        tracks.forEach { track ->
-            val plays = track.playcount.toLongOrNull() ?: 0L
-            val fraction = if (maxPlaycount > 0) (plays.toFloat() / maxPlaycount.toFloat()).coerceIn(0.05f, 1f) else 0.05f
-
-            Column(modifier = Modifier.padding(bottom = 8.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(text = track.name, fontSize = 12.sp, color = textColor)
-                    Text(text = formatNumber(track.playcount), fontSize = 12.sp, color = Color.Gray)
-                }
-                Spacer(modifier = Modifier.height(2.dp))
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth(fraction)
-                        .height(12.dp)
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(barColor)
-                )
-            }
-        }
-    }
-}
-
 // grafico de albums en vertical
 @Composable
 fun TopAlbumsVerticalChart(
