@@ -44,6 +44,7 @@ import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.ui.draw.clip
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -146,7 +147,7 @@ fun CompareScreen(
                             tags1.value = topTags1.toptags?.tag?.take(5) ?: emptyList()
                             tags2.value = topTags2.toptags?.tag?.take(5) ?: emptyList()
 
-                            //
+                            // Fetch Top albums for both artists
                             val topAlbums1 = RetrofitClient.api.getTopAlbums(name1)
                             val topAlbums2 = RetrofitClient.api.getTopAlbums(name2)
                             albums1.value = topAlbums1.topalbums?.album?.filter { it.name != "(null)" } ?: emptyList()
@@ -240,20 +241,20 @@ fun CompareScreen(
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 28.dp))
 
-            // --- SECTION C: HEAD-TO-HEAD SHARE (PROPORTIONAL BARS) ---
-            SectionTitle(title = "Head-to-Head Share", fontSize = fontSize, textColor = currentTextColor)
+            // --- SECTION C: COMPARISON OF METRICS (PROGRESS BARS) ---
+            SectionTitle(title = "Comparison of metrics", fontSize = fontSize, textColor = currentTextColor)
             Spacer(modifier = Modifier.height(16.dp))
-            ComparisonBarChart(
-                title = "Listeners Share",
+            ComparisonProgressBarsChart(
+                title = "Listeners",
                 artist1Name = a1.name,
                 value1 = listeners1,
                 artist2Name = a2.name,
                 value2 = listeners2,
                 textColor = currentTextColor
             )
-            Spacer(modifier = Modifier.height(12.dp))
-            ComparisonBarChart(
-                title = "Playcount Share",
+            Spacer(modifier = Modifier.height(16.dp))
+            ComparisonProgressBarsChart(
+                title = "Playcount",
                 artist1Name = a1.name,
                 value1 = playcount1,
                 artist2Name = a2.name,
@@ -261,29 +262,18 @@ fun CompareScreen(
                 textColor = currentTextColor
             )
 
-            // --- SECTION D: MOST FAMOUS TRACKS (TOP 5) ---
-            if (tracks1.value.isNotEmpty() && tracks2.value.isNotEmpty()) {
+            // --- SECTION D: MOST FAMOUS ALBUMS ---
+            if (albums1.value.isNotEmpty() && albums2.value.isNotEmpty()) {
                 HorizontalDivider(modifier = Modifier.padding(vertical = 28.dp))
 
-                SectionTitle(title = "Most Famous Tracks", fontSize = fontSize, textColor = currentTextColor)
+                SectionTitle(title = "Most Famous Albums", fontSize = fontSize, textColor = currentTextColor)
                 Spacer(modifier = Modifier.height(16.dp))
 
-                val maxPlays = (tracks1.value + tracks2.value)
-                    .maxOfOrNull { it.playcount.toLongOrNull() ?: 0L } ?: 1L
-
-                TopTracksChart(
-                    artistName = a1.name,
-                    tracks = tracks1.value,
-                    maxPlaycount = maxPlays,
-                    barColor = Color(0xFF6200EE),
-                    textColor = currentTextColor
-                )
-                Spacer(modifier = Modifier.height(20.dp))
-                TopTracksChart(
-                    artistName = a2.name,
-                    tracks = tracks2.value,
-                    maxPlaycount = maxPlays,
-                    barColor = Color(0xFF00897B),
+                TopAlbumsVerticalChart(
+                    artist1Name = a1.name,
+                    albums1 = albums1.value,
+                    artist2Name = a2.name,
+                    albums2 = albums2.value,
                     textColor = currentTextColor
                 )
             }
@@ -309,32 +299,11 @@ fun CompareScreen(
                     textColor = currentTextColor
                 )
             }
-
-            // --- SECTION F: MOST FAMOUS ALBUMS ---
-            if (albums1.value.isNotEmpty() && albums2.value.isNotEmpty()) {
-                HorizontalDivider(modifier = Modifier.padding(vertical = 28.dp))
-
-                SectionTitle(title = "Most Famous Albums", fontSize = fontSize, textColor = currentTextColor)
-                Spacer(modifier = Modifier.height(16.dp))
-
-                TopAlbumsRingsChart(
-                    artistName = a1.name,
-                    albums = albums1.value,
-                    accentColor = Color(0xFF6200EE),
-                    textColor = currentTextColor
-                )
-                Spacer(modifier = Modifier.height(20.dp))
-                TopAlbumsRingsChart(
-                    artistName = a2.name,
-                    albums = albums2.value,
-                    accentColor = Color(0xFF00897B),
-                    textColor = currentTextColor
-                )
-            }
         }
     }
 }
 
+// funcion para los titulos
 @Composable
 fun SectionTitle(
     title: String,
@@ -351,6 +320,7 @@ fun SectionTitle(
     )
 }
 
+// funcion para los ganadores
 @Composable
 fun ArtistResultCard(
     artist: ArtistInfo,
@@ -374,18 +344,18 @@ fun ArtistResultCard(
         )
         Spacer(modifier = Modifier.height(8.dp))
 
-        Text(text = "Listeners:", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+        Text(text = "Listeners:", fontWeight = FontWeight.Bold, fontSize = 14.sp)
         Text(text = formatNumber(artist.stats.listeners), fontSize = 14.sp, color = textColor)
 
         Spacer(modifier = Modifier.height(6.dp))
 
-        Text(text = "Playcount:", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+        Text(text = "Playcount:", fontWeight = FontWeight.Bold, fontSize = 14.sp)
         Text(text = formatNumber(artist.stats.playcount), fontSize = 14.sp, color = textColor)
     }
 }
 
 @Composable
-fun ComparisonBarChart(
+fun ComparisonProgressBarsChart(
     title: String,
     artist1Name: String,
     value1: Long,
@@ -394,60 +364,106 @@ fun ComparisonBarChart(
     textColor: Color,
     modifier: Modifier = Modifier
 ) {
-    val total = value1 + value2
-    // Avoid division by zero and never pass 0f to weight()
-    val weight1 = if (total > 0) (value1.toFloat() / total.toFloat()).coerceAtLeast(0.01f) else 0.5f
-    val weight2 = if (total > 0) (value2.toFloat() / total.toFloat()).coerceAtLeast(0.01f) else 0.5f
+    val safe1 = value1.coerceAtLeast(0L)
+    val safe2 = value2.coerceAtLeast(0L)
+    val total = safe1 + safe2
 
-    val percent1 = if (total > 0) (value1 * 100 / total) else 50
+    val percent1 = if (total > 0L) ((safe1 * 100L) / total).toInt().coerceIn(0, 100) else 50
     val percent2 = 100 - percent1
+
+    val progress1 = percent1 / 100f
+    val progress2 = percent2 / 100f
+
+    val color1 = Color(0xFFD50000)
+    val color2 = Color(0xFF0D47A1)
 
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp)
+            .shadow(3.dp, RoundedCornerShape(12.dp))
+            .background(Color.White, RoundedCornerShape(12.dp))
+            .padding(14.dp)
     ) {
         Text(
             text = title,
             fontWeight = FontWeight.Bold,
-            fontSize = 14.sp,
+            fontSize = 15.sp,
             color = textColor
         )
-        Spacer(modifier = Modifier.height(4.dp))
 
-        // Names and percentages
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Artist 1 row
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(text = "$artist1Name ($percent1%)", fontSize = 12.sp, color = Color(0xFF6200EE))
-            Text(text = "$artist2Name ($percent2%)", fontSize = 12.sp, color = Color(0xFF00897B))
+            Text(
+                text = artist1Name,
+                fontWeight = FontWeight.Bold,
+                fontSize = 13.sp,
+                color = color1,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                text = "${formatNumber(safe1.toString())} ($percent1%)",
+                fontWeight = FontWeight.Bold,
+                fontSize = 13.sp,
+                color = color1
+            )
         }
-        Spacer(modifier = Modifier.height(4.dp))
-
-        // Proportional horizontal bar
-        Row(
+        Spacer(modifier = Modifier.height(6.dp))
+        LinearProgressIndicator(
+            progress = { progress1 },
+            color = color1,
+            trackColor = color1.copy(alpha = 0.18f),
             modifier = Modifier
                 .fillMaxWidth()
-                .height(20.dp)
-                .clip(RoundedCornerShape(10.dp))
+                .height(10.dp)
+                .clip(RoundedCornerShape(5.dp))
+        )
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        // Artist 2 row
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
-                modifier = Modifier
-                    .weight(weight1)
-                    .fillMaxHeight()
-                    .background(Color(0xFF6200EE))
+            Text(
+                text = artist2Name,
+                fontWeight = FontWeight.Bold,
+                fontSize = 13.sp,
+                color = color2,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
             )
-            Box(
-                modifier = Modifier
-                    .weight(weight2)
-                    .fillMaxHeight()
-                    .background(Color(0xFF00897B))
+            Text(
+                text = "${formatNumber(safe2.toString())} ($percent2%)",
+                fontWeight = FontWeight.Bold,
+                fontSize = 13.sp,
+                color = color2
             )
         }
+        Spacer(modifier = Modifier.height(6.dp))
+        LinearProgressIndicator(
+            progress = { progress2 },
+            color = color2,
+            trackColor = color2.copy(alpha = 0.18f),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(10.dp)
+                .clip(RoundedCornerShape(5.dp))
+        )
     }
 }
 
+// grafico de albums en horizontal
 @Composable
 fun TopTracksChart(
     artistName: String,
@@ -495,53 +511,178 @@ fun TopTracksChart(
     }
 }
 
-//para los generos
+// grafico de albums en vertical
 @Composable
-fun TopTagsChart(
-    artistName: String,
-    tags: List<TagInfo>,
-    barColor: Color,
+fun TopAlbumsVerticalChart(
+    artist1Name: String,
+    albums1: List<AlbumInfo>,
+    artist2Name: String,
+    albums2: List<AlbumInfo>,
     textColor: Color,
     modifier: Modifier = Modifier
 ) {
+    val count = minOf(albums1.size, albums2.size, 5)
+    if (count == 0) return
+
+    val list1 = albums1.take(count)
+    val list2 = albums2.take(count)
+
+    val maxPlays = (list1 + list2)
+        .maxOfOrNull { it.playcount.toLongOrNull() ?: 0L }
+        ?.coerceAtLeast(1L) ?: 1L
+
     Column(
         modifier = modifier
             .fillMaxWidth()
             .padding(vertical = 8.dp)
     ) {
-        Text(
-            text = "Top Genres - $artistName",
-            fontWeight = FontWeight.Bold,
-            fontSize = 15.sp,
-            color = textColor
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-
-        tags.forEach { tag ->
-            // Last.fm returns count from 0 to 100
-            val fraction = (tag.count / 100f).coerceIn(0.05f, 1f)
-
-            Column(modifier = Modifier.padding(bottom = 8.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(text = tag.name, fontSize = 12.sp, color = textColor)
-                    Text(text = "${tag.count}%", fontSize = 12.sp, color = Color.Gray)
-                }
-                Spacer(modifier = Modifier.height(2.dp))
+        // Color legend for both artists
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth(fraction)
-                        .height(12.dp)
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(barColor)
+                        .size(12.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF6200EE))
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = artist1Name,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    color = textColor
+                )
+            }
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(12.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF00897B))
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = artist2Name,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    color = textColor
                 )
             }
         }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Vertical bars container (160.dp max height)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(160.dp)
+                .padding(horizontal = 8.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.Bottom
+        ) {
+            for (i in 0 until count) {
+                val plays1 = list1[i].playcount.toLongOrNull() ?: 0L
+                val plays2 = list2[i].playcount.toLongOrNull() ?: 0L
+
+                val frac1 = (plays1.toFloat() / maxPlays.toFloat()).coerceIn(0.05f, 1f)
+                val frac2 = (plays2.toFloat() / maxPlays.toFloat()).coerceIn(0.05f, 1f)
+
+                Row(
+                    verticalAlignment = Alignment.Bottom,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.fillMaxHeight()
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .width(16.dp)
+                            .fillMaxHeight(frac1)
+                            .clip(RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp))
+                            .background(Color(0xFF6200EE))
+                    )
+                    Box(
+                        modifier = Modifier
+                            .width(16.dp)
+                            .fillMaxHeight(frac2)
+                            .clip(RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp))
+                            .background(Color(0xFF00897B))
+                    )
+                }
+            }
+        }
+
+        // Baseline (X-axis line)
+        HorizontalDivider(thickness = 1.dp, color = Color.Gray)
+
+        // X-axis labels (#1 to #5)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly
+        ) {
+            for (i in 0 until count) {
+                Text(
+                    text = "#${i + 1}",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = textColor,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.width(36.dp)
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        // Ranking #1 to #5 for Artist 1
+        Text(
+            text = artist1Name,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color(0xFF6200EE),
+            modifier = Modifier.padding(bottom = 4.dp)
+        )
+        list1.take(5).forEachIndexed { index, album ->
+            Text(
+                text = "#${index + 1} — ${album.name} (${formatNumber(album.playcount)})",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                color = textColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(start = 8.dp, top = 2.dp, bottom = 2.dp)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Ranking #1 to #5 for Artist 2
+        Text(
+            text = artist2Name,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color(0xFF00897B),
+            modifier = Modifier.padding(bottom = 4.dp)
+        )
+        list2.take(5).forEachIndexed { index, album ->
+            Text(
+                text = "#${index + 1} — ${album.name} (${formatNumber(album.playcount)})",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                color = textColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(start = 8.dp, top = 2.dp, bottom = 2.dp)
+            )
+        }
     }
 }
-
 
 // Para formatear los numeros
 fun formatNumber(value: String): String {
@@ -549,85 +690,7 @@ fun formatNumber(value: String): String {
     return NumberFormat.getInstance(Locale("es", "ES")).format(number)
 }
 
-//grafico en forma de anillo para los albums
-@Composable
-fun TopAlbumsRingsChart(
-    artistName: String,
-    albums: List<AlbumInfo>,
-    accentColor: Color,
-    textColor: Color,
-    modifier: Modifier = Modifier
-) {
-    val playsList = albums.map { it.playcount.toLongOrNull()?.coerceAtLeast(0L) ?: 0L }
-    val totalPlays = playsList.sum().coerceAtLeast(1L)
-
-    val rawPercentages = playsList.map { ((it * 100f) / totalPlays).toInt() }
-    val diff = 100 - rawPercentages.sum()
-    val maxIndex = rawPercentages.indices.maxByOrNull { rawPercentages[it] } ?: 0
-    val normalizedPercentages = rawPercentages.mapIndexed { idx, value ->
-        if (idx == maxIndex) (value + diff).coerceAtLeast(0) else value.coerceAtLeast(0)
-    }
-
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp)
-    ) {
-        Text(
-            text = "Top Albums - $artistName",
-            fontWeight = FontWeight.Bold,
-            fontSize = 15.sp,
-            color = textColor
-        )
-        Spacer(modifier = Modifier.height(12.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceEvenly
-        ) {
-            albums.forEachIndexed { index, album ->
-                val sharePercent = normalizedPercentages.getOrElse(index) { 0 }
-                val progress = (sharePercent / 100f).coerceIn(0.03f, 1f)
-
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.width(68.dp)
-                ) {
-                    Box(
-                        contentAlignment = Alignment.Center,
-                        modifier = Modifier.size(54.dp)
-                    ) {
-                        CircularProgressIndicator(
-                            progress = { progress },
-                            color = accentColor,
-                            trackColor = accentColor.copy(alpha = 0.2f),
-                            strokeWidth = 5.dp,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                        Text(
-                            text = "$sharePercent%",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = textColor
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = album.name,
-                        fontSize = 11.sp,
-                        color = textColor,
-                        textAlign = TextAlign.Center,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
-        }
-    }
-}
-
-
-//grafico donut para los generos
+// grafico donut para los generos
 @Composable
 fun TopTagsDonutChart(
     artistName: String,
@@ -711,41 +774,6 @@ fun TopTagsDonutChart(
         }
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 @Composable
 fun HistoryScreen(
